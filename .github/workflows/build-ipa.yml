@@ -47,11 +47,14 @@ jobs:
 
       - name: Verify web entry point
         run: |
+          set -euo pipefail
           test -f App/Resources/Web/index.html || {
             echo 'ERROR: App/Resources/Web/index.html was not found after extracting the game.'
             find App/Resources/Web -maxdepth 3 -type f | head -100 || true
             exit 1
           }
+          echo "Game payload size before build:"
+          du -sh App/Resources/Web
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -73,16 +76,46 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             build
 
-      - name: Package IPA
+      - name: Force bundle full game into app
         run: |
           set -euo pipefail
           APP="build/Build/Products/Release-iphoneos/Decade.app"
           test -d "$APP"
+
+          # XcodeGen may flatten/omit a dynamically replaced resource directory.
+          # Copy the complete web game directly into the final app bundle.
+          rm -rf "$APP/Web"
+          mkdir -p "$APP/Web"
+          /usr/bin/ditto App/Resources/Web "$APP/Web"
+
+          test -f "$APP/Web/index.html" || {
+            echo 'ERROR: Web/index.html is missing from the final app bundle.'
+            find "$APP" -maxdepth 3 -type f | head -100 || true
+            exit 1
+          }
+
+          echo "Final bundled game size:"
+          du -sh "$APP/Web"
+          echo "Final app size:"
+          du -sh "$APP"
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release-iphoneos/Decade.app"
+          test -f "$APP/Web/index.html"
           rm -rf Payload Decade-unsigned.ipa
           mkdir Payload
           cp -R "$APP" Payload/Decade.app
           /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload Decade-unsigned.ipa
           ls -lh Decade-unsigned.ipa
+
+          # Refuse to publish a tiny IPA again. A full Decade build should be far larger.
+          SIZE=$(stat -f%z Decade-unsigned.ipa)
+          if [ "$SIZE" -lt 50000000 ]; then
+            echo "ERROR: IPA is unexpectedly small ($SIZE bytes). Game assets were not packaged correctly."
+            exit 1
+          fi
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
