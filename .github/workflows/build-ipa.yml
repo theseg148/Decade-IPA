@@ -1,0 +1,56 @@
+name: Build Decade IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - README.md
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build unsigned app
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Decade.xcodeproj \
+            -scheme Decade \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release-iphoneos/Decade.app"
+          test -d "$APP"
+          rm -rf Payload Decade-unsigned.ipa
+          mkdir Payload
+          cp -R "$APP" Payload/Decade.app
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent Payload Decade-unsigned.ipa
+          ls -lh Decade-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Decade-IPA
+          path: Decade-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
