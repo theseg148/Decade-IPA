@@ -11,10 +11,47 @@ jobs:
   build:
     runs-on: macos-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download full game from latest release if present
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p game_payload
+          if gh release download --pattern 'decade.zip' --dir game_payload; then
+            echo 'Found decade.zip release asset. Replacing placeholder with the full game.'
+            rm -rf App/Resources/Web
+            mkdir -p App/Resources/Web
+            unzip -q game_payload/decade.zip -d App/Resources/Web
+
+            # If the archive contains one wrapper folder, flatten it automatically.
+            shopt -s dotglob nullglob
+            entries=(App/Resources/Web/*)
+            if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
+              wrapper="${entries[0]}"
+              tmp="$(mktemp -d)"
+              mv "$wrapper"/* "$tmp"/ || true
+              rm -rf App/Resources/Web/*
+              mv "$tmp"/* App/Resources/Web/ || true
+              rmdir "$tmp" || true
+            fi
+          else
+            echo 'No decade.zip release asset found; building with the placeholder game page.'
+          fi
+
+      - name: Verify web entry point
+        run: |
+          test -f App/Resources/Web/index.html || {
+            echo 'ERROR: App/Resources/Web/index.html was not found after extracting the game.'
+            find App/Resources/Web -maxdepth 3 -type f | head -100 || true
+            exit 1
+          }
 
       - name: Install XcodeGen
         run: brew install xcodegen
