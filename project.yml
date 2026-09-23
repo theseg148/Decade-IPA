@@ -1,0 +1,30 @@
+name: Decade
+options:
+  bundleIdPrefix: com.abx
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+targets:
+  Decade:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: App
+        excludes:
+          - Resources
+    resources:
+      - path: App/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.abx.decade
+        PRODUCT_NAME: Decade
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: App/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        CODE_SIGN_STYLE: Automatic
+    scheme:
+      testTargets: []
